@@ -6,7 +6,7 @@
 // and ISRCs, and a short summary made on the sharer's device; who someone is comes from their Spotify sign-in, checked by the worker.
 // The page does the rest itself: search, sorting, filters, mood words (the ones used on more than one shared playlist) and overlap with the person's recipes.
 // Classic script, loaded after app.js; it uses app.js and editor.js names at run time.
-(globalThis.scriptVersions = globalThis.scriptVersions || {})["sharing.js"] = "2026-11-14a";   // this file's version, checked against the app's at startup (checkScriptVersions in app.js)
+(globalThis.scriptVersions = globalThis.scriptVersions || {})["sharing.js"] = "2026-11-14b";   // this file's version, checked against the app's at startup (checkScriptVersions in app.js)
 
 const SHARING_URL = "https://music-sharing.roncarmel.workers.dev";
 const SHARE_DESC_MAX = 300, SHARE_OTHER_MAX = 24, SHARE_MOOD_CHARS = 30, SHARE_MOODS_MAX = 8;   // the worker checks the same
@@ -966,6 +966,7 @@ function getError(s) {
 }
 // A playlist's page opens in the popup over the list (Ron, 2026-11-10), which stays where it was scrolled to under it.
 function openDetail(id) {
+  endTyping();
   sharing.detail = id;
   sharing.showOverlapSongs = false;
   renderSharing();
@@ -2047,7 +2048,8 @@ function watchKeyboard() {
   dialog.addEventListener("focusout", () => setTimeout(fit, 50));
   for (const box of [$("msBody"), $("msFlowBody")]) box && box.addEventListener("pointerdown", (e) => {
     const a = document.activeElement;
-    if (a && a.matches("input, textarea") && !e.target.closest("input, textarea, button, label, .ms-moodrow")) a.blur();
+    // a playlist's row is left alone too: putting the keyboard away moved the list under the finger, so the tap missed the row (it opens its page, which ends the typing)
+    if (a && a.matches("input, textarea") && !e.target.closest("input, textarea, button, label, .ms-moodrow, .ms-row")) a.blur();
   });
 }
 function endTyping() {
