@@ -15,55 +15,66 @@ const ADD_CHUNK_SMALL = 10; // what is tried instead if Spotify refuses 100
 const REMOVE_CHUNK = 40;   // playlists removed per request (Spotify's maximum)
 
 const ALL_FORMATS = "__all__";  // dropdown value that means every format
-const APP_VERSION = "2026-11-14d";
+const APP_VERSION = "2026-11-14e";
 
 // Every playlist this app creates gets this at the start of its description. That is the one way the app tells its
 // own playlists from ones you made by hand, so it works on any device, and nothing is stored in this browser for it.
 const APP_MARKER = "Made by Arc";                    // change this whenever the page is updated
-const OLD_APP_MARKERS = ["Made by Ceremony Playlist Builder"];   // the app's name before Arc (2026-11-08): playlists built then are still its own
-function madeByAppText(text) { return typeof text === "string" && [APP_MARKER, ...OLD_APP_MARKERS].some((m) => text.startsWith(m)); }
+function madeByAppText(text) { return typeof text === "string" && text.startsWith(APP_MARKER); }   // "Made by Ceremony Playlist Builder" is no longer read (Ron, 2026-11-14)
 // A playlist Arc built for a participant says so in its description ("For participant MC."). Its songs are what that participant has heard, so building a recipe never
 // replaces or renames it, and Remove built playlists never lists it (decided by Ron, 2026-11-12). Returns the code, or "".
 const PARTICIPANT_RE = /\bFor participant ([A-Z0-9]{1,4})\./;
 function participantOf(text) { const m = typeof text === "string" && madeByAppText(text) ? text.match(PARTICIPANT_RE) : null; return m ? m[1] : ""; }
-// Heard before (Ron, 2026-11-13): playlists a participant heard before Arc, chosen when they are added or later from their row. No playlist of its own: the list rides in the
-// description of every playlist built for them, after "Heard before: ", packed as recipe saves are (formats.js: 16 bytes an ID, 14 bits a character), so deleting one
-// playlist loses nothing and every device reads the same list. Bytes: "H", version 1, the count, the IDs, CRC-16. HEARD_MAX keeps the description within SAVE_LIMIT.
-const HEARD_LABEL = "Heard before: ";
+// A participant's playlist ends with packed data (Ron, 2026-11-14), after "For participant MC. Built 14 Nov 2026.": the recipe it was built from, by its ID, so a renamed
+// playlist or recipe changes nothing (Arc reads no data from playlist names), and their Heard before list: playlists they heard before Arc, chosen when they are added or
+// later from their row (Ron, 2026-11-13). No playlist of its own: every playlist built for them carries the whole list, joined across them, so deleting one loses
+// nothing and every device reads the same list. Packed as recipe saves are (formats.js: 14 bits a character from DENSE_BASE). Bytes: "P", version 1, the recipe ID's
+// length (+128 when it starts "format-", which is left out) and its letters, the number of Heard before playlists and their IDs (16 bytes each), CRC-16.
+// One version only: a page that meets another reads nothing. HEARD_MAX keeps the description within SAVE_LIMIT.
 const HEARD_MAX = 15;
-function packHeard(ids) {
-  const bytes = [0x48, 1, 0];
-  for (const id of ids) { const b = spotifyIdToBytes(id); if (b && bytes[2] < HEARD_MAX) { bytes.push(...b); bytes[2] += 1; } }
-  if (!bytes[2]) return "";
+const DATA_MAGIC = 0x50, DATA_VERSION = 1, RECIPE_PREFIX = "format-";
+function packData({ recipe = "", heard = [] } = {}) {
+  let id = String(recipe || "");
+  const prefixed = id.startsWith(RECIPE_PREFIX);
+  if (prefixed) id = id.slice(RECIPE_PREFIX.length);
+  if (!/^[\x20-\x7e]{0,100}$/.test(id)) id = "";
+  const bytes = [DATA_MAGIC, DATA_VERSION, id.length + (prefixed && id ? 128 : 0), ...[...id].map((c) => c.charCodeAt(0)), 0];
+  const count = bytes.length - 1;
+  for (const h of heard) { const b = spotifyIdToBytes(h); if (b && bytes[count] < HEARD_MAX) { bytes.push(...b); bytes[count] += 1; } }
   const crc = crc16(bytes);
   bytes.push(crc >> 8, crc & 0xff);
-  return HEARD_LABEL + denseEncode(bytes);
+  return denseEncode(bytes);
 }
-function heardOf(text) {
-  const at = typeof text === "string" ? text.indexOf(HEARD_LABEL) : -1;
-  if (at < 0) return [];
+// The packed data of a description, or null: it starts at the first packed character
+function dataOf(text) {
+  if (typeof text !== "string") return null;
+  const at = [...text].findIndex((ch) => ch.charCodeAt(0) >= DENSE_BASE && ch.charCodeAt(0) < DENSE_BASE + 16384);
+  if (at < 0) return null;
   const bytes = [];
   let acc = 0, bits = 0;
-  for (const ch of text.slice(at + HEARD_LABEL.length)) {
+  for (const ch of [...text].slice(at)) {
     const v = ch.charCodeAt(0) - DENSE_BASE;
     if (v < 0 || v >= 16384) break;
     acc = (acc << 14) | v;
     bits += 14;
     while (bits >= 8) { bits -= 8; bytes.push((acc >> bits) & 0xff); acc &= (1 << bits) - 1; }
   }
-  const n = bytes[2] || 0, end = 3 + n * 16;
-  if (bytes[0] !== 0x48 || bytes[1] !== 1 || bytes.length < end + 2) return [];
-  if (crc16(bytes.slice(0, end)) !== ((bytes[end] << 8) | bytes[end + 1])) return [];
-  const ids = [];
-  for (let i = 3; i < end; i += 16) ids.push(bytesToSpotifyId(bytes.slice(i, i + 16)));
-  return ids;
+  if (bytes[0] !== DATA_MAGIC || bytes[1] !== DATA_VERSION || bytes.length < 4) return null;
+  const idLength = bytes[2] & 127, count = bytes[3 + idLength], end = 4 + idLength + (count || 0) * 16;
+  if (count === undefined || bytes.length < end + 2) return null;
+  if (crc16(bytes.slice(0, end)) !== ((bytes[end] << 8) | bytes[end + 1])) return null;
+  const id = String.fromCharCode(...bytes.slice(3, 3 + idLength));
+  const heard = [];
+  for (let i = 4 + idLength; i < end; i += 16) heard.push(bytesToSpotifyId(bytes.slice(i, i + 16)));
+  return { recipe: id ? ((bytes[2] & 128) ? RECIPE_PREFIX : "") + id : "", heard };
 }
-// A description with its Heard before list replaced (none: taken out)
+function heardOf(text) { const d = dataOf(text); return d ? d.heard : []; }
+function recipeOf(text) { const d = dataOf(text); return d ? d.recipe : ""; }
+// A description with its Heard before list replaced (none: taken out), the recipe kept
 function withHeard(text, ids) {
-  const at = String(text || "").indexOf(" " + HEARD_LABEL);
-  const base = at < 0 ? String(text || "") : String(text).slice(0, at);
-  const packed = packHeard(ids);
-  return packed ? `${base} ${packed}` : base;
+  const t = String(text || ""), at = [...t].findIndex((ch) => ch.charCodeAt(0) >= DENSE_BASE && ch.charCodeAt(0) < DENSE_BASE + 16384);
+  const base = (at < 0 ? t : [...t].slice(0, at).join("")).trimEnd();
+  return `${base} ${packData({ recipe: recipeOf(t), heard: ids })}`;
 }
 // When it was built, from "Built 14 Nov 2026." in its description: a time in ms, or 0
 function builtAtOf(text) {
@@ -2489,12 +2500,13 @@ function lengthText(minutes) {
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-function builtDescription(p, number, count, when = new Date(), participant = "", heard = []) {
+function builtDescription(p, number, count, when = new Date(), participant = "", heard = [], recipe = "") {
   // The description of a built playlist: the marker the app recognizes its playlists by (it must come first), the request
-  // to leave it, then which one of the set and when. No segments (decided by Ron, 2026-11-04). One built for a participant names their code.
+  // to leave it, then which one of the set and when. No segments (decided by Ron, 2026-11-04). One built for a participant names their code and the day in words, then
+  // its packed data: the recipe it came from and their Heard before list (packData). The opening was shortened by Ron, 2026-11-14.
   const date = `${when.getDate()} ${MONTHS[when.getMonth()]} ${when.getFullYear()}`;
-  return `${APP_MARKER}. Please do not edit this description. The app uses it to recognize the playlists it made. `
-    + (participant ? withHeard(`For participant ${participant}. Built ${date}.`, heard) : count > 1 ? `Playlist ${number} of ${count}, built ${date}.` : `Built ${date}.`);
+  return `${APP_MARKER}. Do not edit this description. `
+    + (participant ? `For participant ${participant}. Built ${date}. ${packData({ recipe, heard })}` : count > 1 ? `Playlist ${number} of ${count}, built ${date}.` : `Built ${date}.`);
 }
 
 function playlistRow(p, icon) {
@@ -3265,12 +3277,13 @@ async function saveHeardBefore(code, ids) {
   keepPlaylists();
   logStep(`heard before: saved, ${done} rewritten`);
 }
-// A playlist for a participant: Deep journey · MC · 14 Nov, then (2), (3) if that is taken
+// A playlist for a participant: MC · Deep journey · 14 Nov, the code first so Spotify's order by name keeps theirs together; then · 2, · 3 when that is taken
+// (Ron, 2026-11-14). Only for people to read: the code, the day and the recipe are read from the description, so a renamed playlist changes nothing.
 function participantPlaylistName(title, code, when = new Date()) {
-  const base = `${cleanTitle(title).trim() || "Untitled"} \u00b7 ${code} \u00b7 ${when.getDate()} ${MONTHS[when.getMonth()]}`;
+  const base = `${code} \u00b7 ${cleanTitle(title).trim() || "Untitled"} \u00b7 ${when.getDate()} ${MONTHS[when.getMonth()]}`;
   const taken = new Set((playlists || []).map((p) => normName(p.name)));
   let name = base, n = 2;
-  while (taken.has(normName(name))) name = `${base} (${n++})`;
+  while (taken.has(normName(name))) name = `${base} \u00b7 ${n++}`;
   return name;
 }
 
@@ -3863,7 +3876,7 @@ async function buildForParticipant(id, code, repeat = null) {
     // Heard before rides along: what their playlists carry and what was chosen as they were added
     const known = participantList().find((x) => x.code === code);
     const heard = [...new Set([...(known ? known.heard : []), ...pendingHeard(code)])];
-    made = await spotifyRequest("POST", "/me/playlists", { json: { name: p.name, public: false, description: builtDescription(p, 1, 1, new Date(), code, heard) } });
+    made = await spotifyRequest("POST", "/me/playlists", { json: { name: p.name, public: false, description: builtDescription(p, 1, 1, new Date(), code, heard, id) } });
     setPendingHeard(code, null);
     noteBuiltNow(made.id);
     if (made.public !== false) {

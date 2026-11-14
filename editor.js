@@ -4,7 +4,7 @@
 // ($("formats")) in the form the engine reads, and the page is told with an ordinary "input" event, so
 // everything else (previews, backups, saving) works on that text exactly as before.
 // formats.js does the reading and writing of that text. This file draws and handles the screen.
-(globalThis.scriptVersions = globalThis.scriptVersions || {})["editor.js"] = "2026-11-14d";   // this file's version, checked against the app's at startup (checkScriptVersions in app.js)
+(globalThis.scriptVersions = globalThis.scriptVersions || {})["editor.js"] = "2026-11-14e";   // this file's version, checked against the app's at startup (checkScriptVersions in app.js)
 
 // The editor has one color, the theme's accent (--button), and a deeper shade of it (--accent-deep) for the second stripe of a mix.
 const FE_ROW_HEIGHT = 52;
@@ -2684,7 +2684,8 @@ function repeatSection() {
       share = 0; from = "recent"; slider.value = "0"; cards.hidden = true;
       if (person) {
         const latest = person.playlists[0];
-        recent.lastChild.textContent = `${latest.name.split(" \u00b7 ")[0]} \u00b7 ${shortDate(person.last)}`;
+        const r = recipeById(recipeOf(latest.description));
+        recent.lastChild.textContent = r ? `${cleanTitle(r.title).trim() || "Untitled"} \u00b7 ${shortDate(person.last)}` : nameWithoutCode(latest.name, person.code);
         const n = person.playlists.length + (person.heard ? person.heard.length : 0);
         all.lastChild.textContent = n === 1 ? "1 playlist" : `${n} playlists`;
       }
@@ -2922,6 +2923,10 @@ function shortDate(time) { const d = new Date(time); return `${d.getDate()} ${MO
 function builtWhen(time) { const d = new Date(time); return d.getFullYear() === new Date().getFullYear() ? shortDate(time) : String(d.getFullYear()); }
 // The line under a participant's code, in the list and in Build a playlist's card
 // short: the row, beside Build playlist, has room only for the day (Ron, 2026-11-12)
+// A participant's playlist as their row shows it: its name without their code in front (MC · Deep journey · 14 Nov reads Deep journey · 14 Nov); a name they changed is left as it is
+function nameWithoutCode(name, code) { const lead = `${code} \u00b7 `; return String(name || "").startsWith(lead) ? name.slice(lead.length) : String(name || ""); }
+// The recipe a participant's playlist came from (recipeOf, its description), if it still exists
+function recipeById(id) { return id && editor.model ? editor.model.formats.find((f) => f.id === id && !f.draft) || null : null; }
 function personLine(person, short) { const n = person.playlists.length; if (!n) return "Nothing built yet"; const heard = person.heard && person.heard.length; const count = (n === 1 ? "1 playlist" : n + " playlists") + (heard ? ` + ${heard} heard` : ""); return short ? count : `${count} \u00b7 ${`most recent ${builtWhen(person.last)}`.replace(/ /g, "\u00a0")}`; }
 
 // How to build, with the sparkle drawn small in the sentence, like the recipes' note (Ron, 2026-11-12)
@@ -2993,7 +2998,7 @@ function askDeleteParticipant(code) {
     `Delete ${code} and ${n === 1 ? "1 playlist" : n + " playlists"}`);
   const list = feEl("div", { class: "bh-plist bh-del-list" }, ...person.playlists.map((p) => feEl("div", { class: "bh-pl" },
     feEl("span", { class: "bh-cover", style: `background-image:url("${p.image || "playlist-cover.jpg"}")` }),
-    feEl("span", { class: "bh-pl-name", text: p.name.replace(` \u00b7 ${code} \u00b7 `, " \u00b7 ") }),
+    feEl("span", { class: "bh-pl-name", text: nameWithoutCode(p.name, code) }),
     feEl("span", { class: "bh-pl-sub", text: p.count === null || p.count === undefined ? "" : `${p.count} songs` }))));
   const overlay = feEl("div", { class: "fe-overlay", id: "bhDeleteDialog", onClick: close },
     feEl("div", { class: "fe-dialog bh-del-dialog", role: "dialog", "aria-modal": "true", "aria-label": `Delete ${code}`, onClick: (e) => e.stopPropagation() },
@@ -3024,7 +3029,7 @@ function personPlaylists(person) {
     const isNew = mine && mine.state === "done" && mine.id === p.id;
     box.appendChild(feEl("a", { class: "bh-pl" + (isNew ? " pp-new" : ""), href: `https://open.spotify.com/playlist/${p.id}`, target: "_blank", rel: "noopener" },
       feEl("span", { class: "bh-cover", style: `background-image:url("${p.image || "playlist-cover.jpg"}")` }),
-      feEl("span", { class: "bh-pl-name", text: p.name.replace(` · ${code} · `, " · ") }),
+      feEl("span", { class: "bh-pl-name", text: nameWithoutCode(p.name, code) }),
       // the open mark (or Open) sits under the row's chevron, in one column with the trash (Ron, 2026-11-13)
       feEl("span", { class: "bh-pl-end" }, isNew ? feEl("span", { class: "pp-open" }, bhSvg(BH_OPEN), feEl("span", { text: "Open" })) : bhSvg(BH_OPEN))));
   }
@@ -3102,7 +3107,7 @@ function personBuildRow(b) {
   const share = Math.round((b.progress || 0) * 1000) / 10;
   return feEl("div", { class: "bh-pl pp-live", id: "ppBuild", "aria-live": "polite" },
     feEl("span", { class: "bh-cover pp-cover-wait", style: 'background-image:url("playlist-cover.jpg")' }),
-    feEl("span", { class: "bh-text" }, feEl("span", { class: "bh-pl-name", text: b.name.replace(` · ${b.code} · `, " · ") }),
+    feEl("span", { class: "bh-text" }, feEl("span", { class: "bh-pl-name", text: nameWithoutCode(b.name, b.code) }),
       feEl("span", { class: "pp-step" }, feEl("span", { class: "pp-step-text", text: b.step })),
       feEl("span", { class: "pp-bar", "aria-hidden": "true" }, feEl("i", { style: `width:${share}%` }))));
 }
@@ -3270,8 +3275,8 @@ const RECIPE_FIND_FROM = 6;
 function pickRecipeFor(code) {
   const formats = editor.model ? editor.model.formats.filter((f) => !f.draft) : [];
   const person = participantList().find((p) => p.code === code) || { code, playlists: [], last: 0 };
-  const latest = person.playlists[0] ? person.playlists[0].name.split(" · ")[0] : null;
-  const last = latest && formats.find((f) => (cleanTitle(f.title).trim() || "Untitled") === latest);
+  const latest = person.playlists[0] ? recipeOf(person.playlists[0].description) : "";
+  const last = latest && formats.find((f) => f.id === latest);
   const ordered = last ? [last, ...formats.filter((f) => f !== last)] : formats;
   let chosen = null, open = false;
 

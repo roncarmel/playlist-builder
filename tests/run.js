@@ -56,7 +56,7 @@ function planRows(w) {
 // The groups in the build popup when one build makes playlists for several recipes
 function planGroups(w) { return Array.from(w.document.querySelectorAll("#results .bd-group b")).map((b) => b.textContent); }
 
-const MADE = 'Made by Ceremony Playlist Builder from the format "x". Please leave this description as it is: the app uses it to recognize the playlists it made.';
+const MADE = 'Made by Arc. Do not edit this description. Built 1 Nov 2026.';
 const MY_PLAYLISTS = [
   { id: "p1", name: "☘️ intro / outro (soothing, familiar)", owner: { id: "ron" } },
   { id: "p2", name: "💗 spacious + gentle", owner: { id: "ron" }, images: [{ url: "https://img.example/p2-large.jpg" }, { url: "https://img.example/p2-small.jpg" }], tracks: { total: 132 } },
@@ -78,6 +78,15 @@ const OLD_STARTER = (() => {
   const ctx = vm.createContext({ console });
   vm.runInContext(fs.readFileSync(ROOT + "formats.js", "utf8").replace(/\bconst /g, "var ").replace(/\blet /g, "var "), ctx);
   return vm.runInContext("modelToText(defaultModel())", ctx);
+})();
+// A participant playlist's packed data (app.js packData), for fixtures: packedFor("f1", [ids])
+const packedFor = (() => {
+  const vm = require("vm");
+  const ctx = vm.createContext({ console });
+  vm.runInContext(fs.readFileSync(ROOT + "formats.js", "utf8").replace(/\bconst /g, "var ").replace(/\blet /g, "var "), ctx);
+  const app = fs.readFileSync(ROOT + "app.js", "utf8");
+  vm.runInContext(app.slice(app.indexOf("const HEARD_MAX"), app.indexOf("// The packed data of a description")).replace(/\bconst /g, "var "), ctx);
+  return (recipe, heard = []) => ctx.packData({ recipe, heard });
 })();
 const log = [];
 const RUN_STARTED = Date.now();
@@ -883,10 +892,10 @@ print(json.dumps(out))
   var rf = rp.document.getElementById("reportForm"), rq = reportParams(rp);
   check("the report is written in the page: a box for what happened, an optional email, and Send report, pale until something is typed", !!rf && rf.querySelector("#reportText") && rf.querySelector("#reportEmail").type === "email" && rf.querySelector(".mf-send").disabled === true && /Send report/.test(rf.querySelector(".mf-send").textContent) && !rp.document.getElementById("reportLink"));
   check("the details sent are exactly six, and nothing else", JSON.stringify(Object.keys(rq).sort()) === JSON.stringify([...REPORT_KEYS].sort()), JSON.stringify(Object.keys(rq)));
-  check("the details are real: version, browser, window size, python, last error, steps", rq.appVersion === "2026-11-14d" && / on /.test(rq.browser) && /^\d+x\d+$/.test(rq.windowSize) && /^ready \(Python v[\d.]+\)$/.test(rq.python) && rq.lastError === "none" && /^page opened > connected, 5 playlists found > python ready$/.test(rq.recentSteps), JSON.stringify(rq));
+  check("the details are real: version, browser, window size, python, last error, steps", rq.appVersion === "2026-11-14e" && / on /.test(rq.browser) && /^\d+x\d+$/.test(rq.windowSize) && /^ready \(Python v[\d.]+\)$/.test(rq.python) && rq.lastError === "none" && /^page opened > connected, 5 playlists found > python ready$/.test(rq.recentSteps), JSON.stringify(rq));
   rp.document.getElementById("reportSentToggle").click();
   var shown = rp.document.getElementById("reportPreview").textContent;
-  check("Sent with your message opens to show people exactly what goes with it", rp.document.getElementById("reportSent").hidden === false && /Version: 2026-11-14d/.test(shown) && /Browser: .* on /.test(shown) && /Window size: \d+x\d+/.test(shown) && /Python: ready \(v/.test(shown) && /Last error: none/.test(shown) && /Recent steps: page opened > connected/.test(shown), shown);
+  check("Sent with your message opens to show people exactly what goes with it", rp.document.getElementById("reportSent").hidden === false && /Version: 2026-11-14e/.test(shown) && /Browser: .* on /.test(shown) && /Window size: \d+x\d+/.test(shown) && /Python: ready \(v/.test(shown) && /Last error: none/.test(shown) && /Recent steps: page opened > connected/.test(shown), shown);
   check("the version has no label of its own in the page", rp.document.getElementById("appVersionLabel") === null);
   check("there is no include-my-formats option, and a report never carries formats (the only checkbox in Remove built playlists is the remove toggle)", !/include my formats/i.test(rp.document.body.textContent) && !("formats" in rq) && !rp.document.querySelector('#removeSection input[type="checkbox"]:not(#removeToggle)'));
   check("every Report this problem link opens the page's report form, not another site", ["mainReportHint", "removeReportHint", "loginReportHint", "connectionReportHint"].every((id) => { const a = rp.document.getElementById(id).querySelector("a"); return a.classList.contains("report-open") && a.getAttribute("href") === "#"; }));
@@ -1779,7 +1788,7 @@ print(json.dumps(out))
   var k_mine = [
     { id: "m1", name: "mini 1", owner: { id: "ron" } },
     { id: "m2", name: "mini 2", owner: { id: "ron" }, description: "A playlist I made by hand" },
-    { id: "m3", name: "Old warm set 4", owner: { id: "ron" }, description: "Made by Ceremony Playlist Builder from the format \"Old warm set\"." },
+    { id: "m3", name: "Old warm set 4", owner: { id: "ron" }, description: "Made by Arc. Do not edit this description. Built 1 Nov 2026." },
   ];
   var k_o = { extraPlaylists: k_mine };
   var k_w = await boot({ url: "http://127.0.0.1:8000/", session: signedIn(), local: { formats: MINI }, fetchOptions: k_o });
@@ -1802,10 +1811,10 @@ print(json.dumps(out))
   var k_creates = k_o.writes.filter((w) => w.type === "create");
   check("creating renames them first, removes nothing, and gives every new playlist a name of its own", k_o.writes.every((w) => w.type !== "remove") && JSON.stringify(k_o.writes.slice(0, 2).map((w) => [w.type, w.id, w.name])) === JSON.stringify([["update", "m1", "mini 1 (version a)"], ["update", "m2", "mini 2 (version a)"]]) && new Set(k_creates.map((w) => w.name)).size === k_creates.length && k_creates[0].name === "mini 1", JSON.stringify(k_o.writes.slice(0, 3)));
   var k_desc = k_o.writes.filter((w) => w.type === "create").map((w) => w.description);
-  check("each playlist it creates has the mark and the request to leave it, then which one of the set and when, and nothing more", k_desc.length > 1 && k_desc.every((d, i) => d.startsWith("Made by Arc. Please do not edit this description. The app uses it to recognize the playlists it made. Playlist " + (i + 1) + " of " + k_desc.length + ", built ") && /, built \d{1,2} [A-Z][a-z]{2} \d{4}\.$/.test(d)), JSON.stringify(k_desc.slice(0, 2)));
+  check("each playlist it creates has the mark and the request to leave it, then which one of the set and when, and nothing more", k_desc.length > 1 && k_desc.every((d, i) => d.startsWith("Made by Arc. Do not edit this description. Playlist " + (i + 1) + " of " + k_desc.length + ", built ") && /, built \d{1,2} [A-Z][a-z]{2} \d{4}\.$/.test(d)), JSON.stringify(k_desc.slice(0, 2)));
   var k_bd = (segs, n, c) => k_w.eval("builtDescription")({ segments: segs }, n, c, new Date(2026, 10, 4));
-  check("a description reads: one of the set and the date, no segments", k_bd([["Arrival", 20], ["Drums + Voices", 90]], 3, 5) === "Made by Arc. Please do not edit this description. The app uses it to recognize the playlists it made. Playlist 3 of 5, built 4 Nov 2026.", k_bd([["Arrival", 20], ["Drums + Voices", 90]], 3, 5));
-  check("a single playlist says only when it was built", /made\. Built 4 Nov 2026\.$/.test(k_bd([["Arrival", 20]], 1, 1)));
+  check("a description reads: one of the set and the date, no segments", k_bd([["Arrival", 20], ["Drums + Voices", 90]], 3, 5) === "Made by Arc. Do not edit this description. Playlist 3 of 5, built 4 Nov 2026.", k_bd([["Arrival", 20], ["Drums + Voices", 90]], 3, 5));
+  check("a single playlist says only when it was built", /description\. Built 4 Nov 2026\.$/.test(k_bd([["Arrival", 20]], 1, 1)));
   check("nothing about it is stored in this browser: the mark in the description is the only record", k_w.localStorage.getItem("madeIds") === null);
   await waitFor(() => k_w.eval("playlists").some((p) => /^mini 3$/.test(p.name)), 10000);
   check("after creating, those playlists count as the app's own and stay out of the segment list", k_w.eval("playlists").filter((p) => p.madeByApp).length === 1 + k_o.writes.filter((w) => w.type === "create").length && !k_names().some((n) => /^mini \d+$/.test(n)) && !/Note: Spotify's playlist list/.test(k_w.document.getElementById("actionMessage").textContent));
@@ -2957,7 +2966,7 @@ print(json.dumps([counts, r["shared"], [s["has"] for s in r["sources"]], c["sour
   ws_w.eval("window.__delays = []; window.setTimeout = function (f, ms) { window.__delays.push(ms); f(); return 0; };");
   ws_w.eval(ws_src);
   ws_w.sessionStorage.setItem("startupRefreshed", "1");   // a fresh load has already been tried this visit, so the popup shows at once
-  ws_w.dispatchEvent(new ws_w.ErrorEvent("error", { message: "Unexpected token", filename: "http://127.0.0.1:8000/app.js?v=2026-11-14d", lineno: 12 }));
+  ws_w.dispatchEvent(new ws_w.ErrorEvent("error", { message: "Unexpected token", filename: "http://127.0.0.1:8000/app.js?v=2026-11-14e", lineno: 12 }));
   ws_w.dispatchEvent(new ws_w.Event("load"));
   var ws_box = ws_w.document.getElementById("startupProblem");
   check("the watchdog marks the page as not started until the script says so", ws_w.pageStart.started === false);
@@ -3447,7 +3456,7 @@ print(json.dumps([counts, r["shared"], [s["has"] for s in r["sources"]], c["sour
   var rw_w = await boot({ url: "http://127.0.0.1:8000/" });
   var rw_word = rw_w.document.getElementById("recipeWhat"), rw_note = rw_w.document.getElementById("recipeWhatText");
   var rw_para = rw_word && rw_word.closest("p");
-  check("the intro says Describe this arc in a recipe, with recipe as a link-like button and no bracketed list after it", !!rw_word && rw_word.textContent === "recipe" && rw_word.classList.contains("linklike") && !!rw_para && /Describe this arc in a recipe and the builder makes new ceremony playlists/.test(rw_para.textContent.replace(rw_note.textContent, "")) && !/\(which of your Spotify playlists/.test(rw_para.textContent));
+  check("the intro says Describe this arc in a recipe, with recipe as a link-like button and no bracketed list after it", !!rw_word && rw_word.textContent === "recipe" && rw_word.classList.contains("linklike") && !!rw_para && /Describe this arc in a recipe and the builder follows it to make new ceremony playlists/.test(rw_para.textContent.replace(rw_note.textContent, "")) && !/\(which of your Spotify playlists/.test(rw_para.textContent));
   check("the note starts closed, and recipe opens it with the agreed text", rw_note.hidden === true && rw_word.getAttribute("aria-expanded") === "false" && (rw_word.click(), rw_note.hidden === false) && rw_word.getAttribute("aria-expanded") === "true" && rw_note.textContent === "A recipe is a plan for one ceremony: which of your Spotify playlists to draw from, in what order, and for how many minutes each.");
   rw_note.click();
   check("a tap on the note leaves it open, a tap elsewhere closes it", rw_note.hidden === false && (rw_w.document.body.click(), rw_note.hidden === true) && rw_word.getAttribute("aria-expanded") === "false");
@@ -4756,7 +4765,7 @@ print(json.dumps([counts, r["shared"], [s["has"] for s in r["sources"]], c["sour
   sc_d.getElementById("appTool").click();
   sc_d.getElementById("appToolMenu").querySelector('[data-view="home"]').click();
   await new Promise((r) => setTimeout(r, 50));
-  check("playlists built before the rename (Made by Ceremony Playlist Builder) are still the app's own, as are new ones (Made by Arc)", sc_w.eval("madeByAppText('Made by Ceremony Playlist Builder. Please do not edit') && madeByAppText('Made by Arc. Please do not edit') && !madeByAppText('Made by me') && !madeByAppText(null)"));
+  check("only Made by Arc marks the app's own playlists; the old Made by Ceremony Playlist Builder is no longer read", sc_w.eval("!madeByAppText('Made by Ceremony Playlist Builder. Please do not edit') && madeByAppText('Made by Arc. Do not edit') && !madeByAppText('Made by me') && !madeByAppText(null)"));
   check("Arc home goes home, and Music sharing closes", sc_d.documentElement.classList.contains("view-home") && sc_d.getElementById("msOverlay").hidden === true);
   sc_d.getElementById("homeBuilder").click();
   check("Playlist builder opens the builder, Arc's bar naming it", sc_d.documentElement.classList.contains("view-builder") && sc_d.getElementById("appTool").textContent === "Playlist builder");
@@ -5351,7 +5360,7 @@ print(json.dumps([counts, r["shared"], [s["has"] for s in r["sources"]], c["sour
   var sr_make = async (opts = {}) => {
     const w = await boot({ url: "http://127.0.0.1:8000/", session: opts.session || {} });
     w.eval(sr_src);
-    w.document.head.insertAdjacentHTML("beforeend", ["theme.js", "formats.js", "editor.js", "app.js"].map((f) => `<script src="${f}?v=2026-11-14d"></script>`).join(""));   // the page's own script tags, as a browser has them (added as text, since the checks' page treats a script added by code as a file to load)
+    w.document.head.insertAdjacentHTML("beforeend", ["theme.js", "formats.js", "editor.js", "app.js"].map((f) => `<script src="${f}?v=2026-11-14e"></script>`).join(""));   // the page's own script tags, as a browser has them (added as text, since the checks' page treats a script added by code as a file to load)
     w.__fetched = []; w.__reloaded = 0;
     w.fetch = (url, init) => { w.__fetched.push({ url: String(url), cache: init && init.cache }); return Promise.resolve({ ok: opts.fetchOk !== false && !(opts.failPage && /\/$|index/.test(String(url).replace("http://127.0.0.1:8000", "") || "/")) }); };
     w.pageStart.reload = () => { w.__reloaded += 1; };
@@ -5680,8 +5689,8 @@ print(json.dumps([counts, r["shared"], [s["has"] for s in r["sources"]], c["sour
   if (want("builder landing and participants")) { try {
   // ================================================================ the builder's landing, the recipe panel with explicit saving, and participants (Ron, 2026-11-12)
   var bl_two = 'FORMATS = {"f1": {"title": "Alpha", "name": "Alpha {n}", "silence between segments": "30 sec", "segments": [("A", 20), ("B", 10)]}, "f2": {"title": "Beta", "name": "Beta {n}", "segments": [("C", 15)]}}';
-  var bl_MADE = "Made by Arc. Please do not edit this description. The app uses it to recognize the playlists it made.";
-  var bl_people = [{ id: "q1", name: "Alpha · MC · 3 Oct", owner: { id: "ron" }, description: bl_MADE + " For participant MC. Built 3 Oct 2026." }, { id: "q2", name: "Beta · T7 · 28 Oct", owner: { id: "ron" }, description: bl_MADE + " For participant T7. Built 28 Oct 2026." }, { id: "q4", name: "Beta · AA · 28 Oct", owner: { id: "ron" }, description: bl_MADE + " For participant AA. Built 28 Oct 2026." }, { id: "q3", name: "Alpha 1", owner: { id: "ron" }, description: bl_MADE + " Playlist 1 of 1, built 1 Oct 2026." }];
+  var bl_MADE = "Made by Arc. Do not edit this description.";
+  var bl_people = [{ id: "q1", name: "MC · Alpha · 3 Oct", owner: { id: "ron" }, description: bl_MADE + " For participant MC. Built 3 Oct 2026. " + packedFor("f1") }, { id: "q2", name: "T7 · Beta · 28 Oct", owner: { id: "ron" }, description: bl_MADE + " For participant T7. Built 28 Oct 2026. " + packedFor("f2") }, { id: "q4", name: "AA · Beta · 28 Oct", owner: { id: "ron" }, description: bl_MADE + " For participant AA. Built 28 Oct 2026." }, { id: "q3", name: "Alpha 1", owner: { id: "ron" }, description: bl_MADE + " Playlist 1 of 1, built 1 Oct 2026." }];
   var bl = await boot({ url: EDURL, session: signedIn(), local: { formats: bl_two }, fetchOptions: { extraPlaylists: bl_people }, panel: false }), bd = bl.document;
   var bl_rows = () => Array.from(bd.querySelectorAll("#bhRecipes .bh-recipe"));
   check("the landing lists each recipe with its length and segments, its shape, and icons for Edit and Build (no Delete: it is in the panel), then New recipe last", [...bd.getElementById("bhRecipes").querySelectorAll(".bh-row")].pop().id === "bhNewRecipe" && bl_rows().map((r) => r.querySelector(".bh-name").textContent).join() === "Alpha,Beta" && bl_rows()[0].querySelector(".bh-sub").textContent === "31 min · 2 segments" && bl_rows()[0].querySelectorAll(".bh-shape span").length === 3 && bl_rows()[0].querySelector(".bh-build").getAttribute("aria-label") === "Build" && !bl_rows()[0].querySelector(".bh-build").textContent.trim() && JSON.stringify([...bl_rows()[0].querySelectorAll(".bh-ib")].map((x) => x.getAttribute("aria-label"))) === '["Edit Alpha","Build"]', bl_rows().map((r) => r.textContent).join("|"));
@@ -5738,7 +5747,7 @@ print(json.dumps([counts, r["shared"], [s["has"] for s in r["sources"]], c["sour
   check("participantList groups them by code, the latest first; built the same day, Spotify's order (newest first), not the alphabet", JSON.stringify(bl.eval("participantList().map((p) => p.code + p.playlists.length)")) === '["T71","AA1","MC1"]');
   check("a playlist built in this tab sorts by its time (kept for the session), ahead of one built the same day elsewhere", (() => { bl.eval("noteBuiltNow('q4')"); const out = JSON.stringify(bl.eval("participantList().map((p) => p.code)")); bl.sessionStorage.removeItem("participantBuiltAt"); return out === '["AA","T7","MC"]' && JSON.stringify(bl.eval("participantList().map((p) => p.code)")) === '["T7","AA","MC"]'; })());
   check("a participant's playlist is never part of a recipe's set (not replaced or removed with it)", bl.eval("recipeMatches(modelToText(editor.model), ['f1']).map((p) => p.id).join()") === "q3");
-  check("their playlist is named recipe, code and day, and its description says who it is for", bl.eval("participantPlaylistName('Alpha', 'MC', new Date(2026, 10, 14))") === "Alpha · MC · 14 Nov" && /For participant MC\. Built 14 Nov 2026\.$/.test(bl.eval("builtDescription({}, 1, 1, new Date(2026, 10, 14), 'MC')")));
+  check("their playlist is named code, recipe and day, and its description says who it is for, then its packed recipe", bl.eval("participantPlaylistName('Alpha', 'MC', new Date(2026, 10, 14))") === "MC · Alpha · 14 Nov" && bl.eval("builtDescription({}, 1, 1, new Date(2026, 10, 14), 'MC', [], 'format-abc12345')").startsWith("Made by Arc. Do not edit this description. For participant MC. Built 14 Nov 2026. ") && bl.eval("recipeOf(builtDescription({}, 1, 1, new Date(2026, 10, 14), 'MC', [], 'format-abc12345'))") === "format-abc12345");
   var bd3 = await boot({ url: EDURL, session: signedIn(), local: { formats: bl_two, devMode: "1" }, fetchOptions: { extraPlaylists: bl_people }, panel: false });
   check("in developer mode Participants opens a list of codes, with no New participant (one way in: Build)", !bd3.document.getElementById("bhTabPeople").disabled && (() => { bd3.document.getElementById("bhTabPeople").click(); return Array.from(bd3.document.querySelectorAll("#bhPeople .bh-code")).map((c) => c.textContent).join() === "T7,AA,MC" && bd3.document.querySelector("#bhPeople .bh-code").children.length === 4 && !bd3.document.getElementById("bhNewPerson"); })());
   (() => {
@@ -5886,7 +5895,7 @@ print(json.dumps([counts, r["shared"], [s["has"] for s in r["sources"]], c["sour
   check("replacing the list keeps the rest of the description, and an edited list reads as none", (() => {
     const d = bd4.eval(`withHeard(builtDescription({}, 1, 1, new Date(2026, 10, 14), 'MC', ['${hb_id}']), [])`);
     const two = bd4.eval(`withHeard(builtDescription({}, 1, 1, new Date(2026, 10, 14), 'MC', ['${hb_id}']), ['${hb_id}', '${hb_ids15[0]}'])`);
-    return /For participant MC\. Built 14 Nov 2026\.$/.test(d) && bd4.eval(`heardOf(${JSON.stringify(two)}).length`) === 2 && bd4.eval(`heardOf(${JSON.stringify(two.slice(0, -3) + "\u4e00\u4e00\u4e00")}).length`) === 0;
+    return d.includes("For participant MC. Built 14 Nov 2026. ") && bd4.eval(`heardOf(${JSON.stringify(d)}).length`) === 0 && bd4.eval(`recipeOf(withHeard(builtDescription({}, 1, 1, new Date(2026, 10, 14), "MC", ["${hb_id}"], "format-keep1234"), []))`) === "format-keep1234" && bd4.eval(`heardOf(${JSON.stringify(two)}).length`) === 2 && bd4.eval(`heardOf(${JSON.stringify(two.slice(0, -3) + "\u4e00\u4e00\u4e00")}).length`) === 0;
   })());
   TRACKS[hb_id] = TRACKS.p4.map((it) => (it && it.track && it.track.uri ? { track: { ...it.track, uri: it.track.uri.replace("p4", "hb") } } : it));
   var hb_fo = { extraPlaylists: bl_people.concat([{ id: hb_id, name: "Old circle", owner: { id: "ron" }, description: "" }]) };
