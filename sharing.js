@@ -6,7 +6,7 @@
 // and ISRCs, and a short summary made on the sharer's device; who someone is comes from their Spotify sign-in, checked by the worker.
 // The page does the rest itself: search, sorting, filters, mood words (the ones used on more than one shared playlist) and overlap with the person's recipes.
 // Classic script, loaded after app.js; it uses app.js and editor.js names at run time.
-(globalThis.scriptVersions = globalThis.scriptVersions || {})["sharing.js"] = "2026-11-14c";   // this file's version, checked against the app's at startup (checkScriptVersions in app.js)
+(globalThis.scriptVersions = globalThis.scriptVersions || {})["sharing.js"] = "2026-11-14d";   // this file's version, checked against the app's at startup (checkScriptVersions in app.js)
 
 const SHARING_URL = "https://music-sharing.roncarmel.workers.dev";
 const SHARE_DESC_MAX = 300, SHARE_OTHER_MAX = 24, SHARE_MOOD_CHARS = 30, SHARE_MOODS_MAX = 8;   // the worker checks the same
@@ -781,7 +781,6 @@ function slideFind(id, dir, change) {
   }
   if (now) now.animate([{ opacity: 0, transform: `translateX(${dir * 30}px)` }, { opacity: 1, transform: "none" }], { duration: 240, delay: 60, easing: EASE_OUT, fill: "backwards" });
 }
-const SEARCH_HINTS = { all: "Search", ceremony: "Search ceremonies", phase: "Search phases", mood: "Search moods", other: "Search others" };
 function renderFind(body) {
   if (!sortChoices().some(([v]) => v === sharing.sort)) sharing.sort = "newest";
   const has = sharing.library && sharing.library.shares.length;
@@ -793,7 +792,7 @@ function renderFind(body) {
   if (has) {
     const t = sharing.type;
     const label = (sortChoices().find(([v]) => v === sharing.sort) || SORTS[0])[1];
-    head.appendChild(feEl("div", { class: "ms-searchrow" }, searchField(SEARCH_HINTS[t]),
+    head.appendChild(feEl("div", { class: "ms-searchrow" }, searchField("Search playlists"),
       feEl("button", { type: "button", id: "msSortButton", class: "ms-tbtn ms-sortbtn", "aria-haspopup": "menu", "aria-expanded": "false", "aria-label": "Sort: " + label, onClick: openSortMenu }, feEl("b", {}, label), feIcon("chevron"))));
     if (t === "ceremony") {
       tools.appendChild(feEl("p", { class: "ms-flabel2" }, "Which book"));
@@ -2050,6 +2049,12 @@ function watchKeyboard() {
     const a = document.activeElement;
     // a playlist's row is left alone too: putting the keyboard away moved the list under the finger, so the tap missed the row (it opens its page, which ends the typing)
     if (a && a.matches("input, textarea") && !e.target.closest("input, textarea, button, label, .ms-moodrow, .ms-row")) a.blur();
+  });
+  // nor does the press itself take the focus from the field (a row can have the focus): the tabs and tiles hidden while searching came back
+  // the moment it left, moving the row away before the tap ended, so the tap missed it
+  $("msBody") && $("msBody").addEventListener("mousedown", (e) => {
+    const a = document.activeElement;
+    if (a && a.matches("input, textarea") && e.target.closest(".ms-row")) e.preventDefault();
   });
 }
 function endTyping() {
